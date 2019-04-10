@@ -2,6 +2,8 @@
 
 [**Project**](https://tutvision.github.io/icface/) | [**Youtube**](https://www.youtube.com/watch?v=VhWrAjI6z0M) | [**Arxiv**](https://arxiv.org/abs/1904.01909)
 ***
+![](https://github.com/Blade6570/icface/blob/master/images/tease.png?raw=true "teaser image")
+
 This is the part of the implementation of "ICface: Interpretable and Controllable Face Reenactment Using GANs" (https://arxiv.org/abs/1904.01909). 
 
 :white_check_mark:**_The test code is released now!_**

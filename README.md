@@ -1,4 +1,5 @@
-**ICface: Interpretable and Controllable Face Reenactment Using GANs**
+##ICface: Interpretable and Controllable Face Reenactment Using GANs
+
 [**Project**](https://tutvision.github.io/icface/)   
 
 This is the part of implementation for the  "ICface: Interpretable and Controllable Face Reenactment Using GANs" (https://arxiv.org/abs/1904.01909). 
@@ -12,6 +13,7 @@ This is the part of implementation for the  "ICface: Interpretable and Controlla
 4. Natsort
 
 *The code is tested on Ubuntu 16.04 LTS* 
+
 **Download Pretrained Weights of ICface**
 [Google Drive Link](https://drive.google.com/drive/folders/1jvD8R-Ggo3Seg2tF-JsqlOjwropVwN1S?usp=sharing). 
 

@@ -1,0 +1,686 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Oct 25 17:51:34 2018
+
+@author: esa
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Oct 23 17:42:29 2018
+
+@author: esa
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Oct 22 19:08:31 2018
+
+@author: esa
+"""
+
+import torch
+from collections import OrderedDict
+#from torch.autograd import Variable
+import util.util as util
+from util.image_pool import ImagePool
+from .base_model import BaseModel
+from . import networks
+#import itertools
+import torch.nn as nn
+import torch.nn.functional as F
+import pdb
+import torchvision
+import os
+from torch import autograd
+import copy
+
+
+class Estimate(nn.Module):
+    def __init__(self):
+        super(Estimate, self).__init__()
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, 4, stride=2, padding=1),
+            nn.Conv2d(64, 64, 4, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(64, 128, kernel_size=4, stride=2, padding=1, bias=True),
+#            nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1, bias=True),
+#            nn.Conv2d(64,128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(128, 3, kernel_size=4, stride=2, padding=1, bias=True),
+#            nn.BatchNorm2d(64),
+#            nn.ReLU(inplace=True),
+         )
+        
+#        self.classifier = nn.Sequential(
+#            nn.Linear(576, 236)
+#        )
+    def forward(self, x):
+        
+        x = F.tanh(self.features(x))
+#        y=F.tanh(self.classifier(x.view(x.size(0),576)))
+        
+#        o = F.tanh(d8)
+#        x6 = self.down4(x5)
+        return x
+    
+#class Estimate(nn.Module):
+#    def __init__(self):
+#            super(Estimate, self).__init__()
+##        self.features = nn.Sequential(
+#            self.conv1=nn.Conv2d(3, 64, 4, stride=2, padding=1)
+#            self.conv2 = nn.Conv2d(64, 64, 4, stride=2, padding=1)
+#            self.conv2_bn=nn.BatchNorm2d(64)
+##            nn.ReLU(inplace=True),
+#            self.deconv1=nn.ConvTranspose2d(64, 64, kernel_size=4, stride=2, padding=1, bias=True)
+##            nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1, bias=True),
+##            nn.Conv2d(64,128, kernel_size=4, stride=2, padding=1),
+#            self.deconv1_bn=nn.BatchNorm2d(64)
+##            nn.ReLU(inplace=True),
+#            self.deconv2=nn.ConvTranspose2d(64*2, 3, kernel_size=4, stride=2, padding=1, bias=True)
+##            nn.BatchNorm2d(64),
+##            nn.ReLU(inplace=True),
+##         )
+##        s
+##        self.classifier = nn.Sequential(
+##            nn.Linear(576, 236)
+##        )
+#    def forward(self, input):
+#        
+#        e1 = self.conv1(input)
+#        e2 = self.conv2_bn(self.conv2(F.relu(e1)))
+#        d1 = self.deconv1_bn(self.deconv1(F.relu(e2)))
+#        d1 = torch.cat([d1, e1], 1)
+#        d2 = self.deconv2(d1)
+#        o = F.tanh(d2)
+##        y=F.tanh(self.classifier(x.view(x.size(0),576)))
+#        
+##        o = F.tanh(d8)
+##        x6 = self.down4(x5)
+#        return o
+
+class Pix2PixModel(BaseModel):
+    def name(self):
+        return 'Pix2PixModel'
+    def _compute_loss_smooth(self, mat):
+                return torch.sum(torch.abs(mat[:, :, :, :-1] - mat[:, :, :, 1:])) + \
+                   torch.sum(torch.abs(mat[:, :, :-1, :] - mat[:, :, 1:, :]))
+    def initialize(self, opt):
+        BaseModel.initialize(self, opt)
+        self.isTrain = opt.isTrain
+        self.B=opt.batchSize
+
+        # load/define networks
+        self.netG = networks.define_G(opt.input_nc+20, opt.output_nc, opt.ngf,
+                                      opt.which_model_netG, opt.norm, not opt.no_dropout, opt.init_type, self.gpu_ids)
+        
+        self.netGN = networks.define_G(opt.input_nc+20, opt.output_nc, opt.ngf,
+                                      opt.which_model_netG, opt.norm, not opt.no_dropout, opt.init_type, self.gpu_ids)        
+#        self.netGR = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf,
+#                                      opt.which_model_netG, opt.norm, not opt.no_dropout, opt.init_type, self.gpu_ids)
+        
+        self.I_E=Estimate().cuda()
+#        pdb.set_trace()
+#        self.I_D=Decoder().cuda()
+        #setting up the saliency model for loss calculations
+#        self.u_sal=saliency_encoder().cuda()
+        
+        
+        if self.isTrain:
+            use_sigmoid = opt.no_lsgan
+            self.netDA = networks.define_D(opt.input_nc, opt.ndf,
+                                          opt.which_model_netD,
+                                          opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, self.gpu_ids)
+#            self.netDB = networks.define_D(opt.input_nc, opt.ndf,
+#                                          opt.which_model_netD,
+#                                          opt.n_layers_D, opt.norm, use_sigmoid, opt.init_type, self.gpu_ids)
+        if not self.isTrain or opt.continue_train:
+            self.load_network(self.netG, 'G', opt.which_epoch)
+            self.load_network(self.netGN, 'GN', opt.which_epoch)
+            self.load_network(self.I_E, 'I_E', opt.which_epoch)
+#            self.load_network(self.I_D, 'I_D', opt.which_epoch)
+            
+            if self.isTrain:
+                self.load_network(self.netDA, 'DA', opt.which_epoch)
+#                self.load_network(self.netDB, 'DB', opt.which_epoch) 
+                
+        
+        self.generator_test = copy.deepcopy(self.netG)
+        self.generator_testN = copy.deepcopy(self.netGN)
+        if self.isTrain:
+            self.fake_AB_pool = ImagePool(opt.pool_size)
+            # define loss functions
+            self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan, tensor=self.Tensor)
+            self.criterionL1_F = torch.nn.L1Loss(size_average=False)
+            self.criterionL1 = torch.nn.L1Loss()
+            self.criterionL2 = torch.nn.MSELoss()
+            self.criterionVGG = networks.VGGLoss(self.gpu_ids)
+            self.criterionCE = torch.nn.CrossEntropyLoss()
+
+            # initialize optimizers
+            self.schedulers = []
+            self.optimizers = []
+#            params = list(self.netG.parameters())
+#            params += list(self.I_E.parameters())
+            
+            self.optimizer_I = torch.optim.Adam(self.I_E.parameters(),lr=opt.lr, betas=(opt.beta1, 0.999)) #0.1 in other program
+#            self.optimizer_D = torch.optim.Adam(self.I_D.parameters(),
+#                                                lr=0.0002, betas=(opt.beta1, 0.999),weight_decay=0)
+            self.optimizer_G = torch.optim.RMSprop(self.netG.parameters(), lr=opt.lr, alpha=0.99, eps=1e-8)#torch.optim.Adam(self.netG.parameters(), #                                                lr=opt.lr, betas=(0, 0.999),amsgrad=False,weight_decay=0)
+            self.optimizer_GN =torch.optim.RMSprop(self.netGN.parameters(), lr=opt.lr, alpha=0.99, eps=1e-8)# torch.optim.Adam(self.netGN.parameters(), #torch.optim.RMSprop(self.netGN.parameters(), lr=opt.lr)#
+                                       #         lr=opt.lr, betas=(0, 0.999),amsgrad=False)
+#            pdb.set_trace()
+            self.optimizer_DA = torch.optim.RMSprop(self.netDA.parameters(), lr=opt.lr, alpha=0.99, eps=1e-8)#torch.optim.Adam(self.netDA.parameters(), #torch.optim.RMSprop(self.netDA.parameters(), lr=opt.lr)#
+                                               # lr=opt.lr, betas=(0, 0.999),amsgrad=False,weight_decay=0)
+#            self.optimizer_DB = torch.optim.Adam(self.netDB.parameters(),
+#                                                lr=opt.lrD, betas=(opt.beta1, 0.999),amsgrad=True)
+            self.optimizers.append(self.optimizer_G)
+            self.optimizers.append(self.optimizer_GN)
+#            self.optimizers.append(self.optimizer_DB)
+            self.optimizers.append(self.optimizer_DA)
+            self.optimizers.append(self.optimizer_I)
+          #  self.optimizers.append(self.optimizer_D)
+            for optimizer in self.optimizers:
+                self.schedulers.append(networks.get_scheduler(optimizer, opt))
+
+        print('---------- Networks initialized -------------')
+        networks.print_network(self.netG)
+        if self.isTrain:
+            networks.print_network(self.netDA)
+        print('-----------------------------------------------')
+
+    def set_input(self, input):
+#        AtoB = self.opt.which_direction == 'AtoB'
+        input_A = input['A'] #if AtoB else 'B']
+        input_B = input['B']
+        P_A = input['PA']
+        P_B = input['PB']
+        I = input['I']
+        C=input['C']
+        #if AtoB elself.criterionL1 = torch.nn.L1Loss(size_average=False)se 'A']
+#        pdb.set_trace()
+#        input_B[:,0,0:3]=(input_B[:,0,0:3]-(-0.50))/1
+#        input_B[:,0,3:20]=input_B[:,0,3:20]/5
+#        pdb.set_trace()
+#        print(input_B)
+#        input_S = input['S']
+        if len(self.gpu_ids) > 0:
+            input_A = input_A.cuda(self.gpu_ids[0], async=True)
+            input_B = input_B.cuda(self.gpu_ids[0], async=True)
+            P_A = P_A.cuda(self.gpu_ids[0], async=True)
+            P_B = P_B.cuda(self.gpu_ids[0], async=True)
+            I = I.cuda(self.gpu_ids[0], async=True)
+            C = C.cuda(self.gpu_ids[0], async=True)
+#            input_S = input_S.cuda(self.gpu_ids[0], async=True)
+        self.input_A = input_A
+        self.input_B = input_B
+        self.P_A = P_A
+        self.P_B = P_B
+        self.I = I/939
+        self.C = C.long().view(-1)
+#        self.input_S = input_S
+#        print(self.input_A.size())
+        self.image_paths = input['A_paths']# if AtoB else 'B_paths']
+        self.ref_paths = input['B_paths']
+#        pdb.set_trace()
+       
+        
+#    def test(self):
+#        
+#        self.real_A = self.input_A        
+#        self.real_A.requires_grad=True
+#        
+#        self.real_B = self.input_B        
+#        self.real_B.requires_grad=True
+#        
+#        self.param_A = self.P_A.view(self.B,20)
+#        self.param_B = self.P_B.view(self.B,20)
+#        self.netG.eval()
+#        self.netGN.eval()
+#        self.I_E.eval()
+##        self.param_A.requires_grad=True
+#        
+#        with torch.no_grad():
+#            I_p=self.I_E(self.real_A)
+##        pdb.set_trace()
+#        self.AUN=self.param_A.float()/100000
+#        self.AUN[:,0:3] = 0.5 #
+##        self.AUN=self.real_B.float()+torch.randn(self.B,20).cuda()/10
+##        self.AUN=torch.clamp(self.AUN,0,1)
+#        I_pd=I_p.detach()
+##        pdb.set_trace()
+##        I_pd.requires_grad=True
+#        self.fake_B = self.netGN(torch.cat([I_pd.data,self.AUN],dim=1))
+#        AUR=self.param_B.view(-1,20).float()
+#        
+#        with torch.no_grad():
+#            I_f=self.I_E(self.fake_B)
+#        I_fd=I_f.detach()
+##        I_fd.requires_grad=True
+#        
+##        pdb.set_trace()
+##        self.new_z2=z.view(z.size(0), z.size(1), 1, 1).expand(z.size(0), z.size(1), self.fake_B.size(2), self.fake_B.size(3))
+##        with torch.no_grad():
+#        self.fake_B_recon=self.netG(torch.cat([I_fd.data,AUR],dim=1))
+               
+        
+    def test(self):
+        
+#        self.real_A = self.input_A        
+#        self.real_A.requires_grad=True
+        
+#        self.real_B = self.input_B        
+#        self.real_B.requires_grad=True
+      
+        self.netG.eval()
+        self.netGN.eval()
+        self.I_E.eval()
+#        self.up1.eval()
+#        self.param_A.requires_grad=True
+        pdb.set_trace()
+        desti=os.path.dirname(self.image_paths[0].replace('/home/esa/Downloads/unzippedFaces','./results'))
+        if not os.path.isdir(desti):
+            os.makedirs(desti)
+        self.U=nn.Upsample(size=(256,256), scale_factor=None, mode='bilinear', align_corners=None)          
+    
+        for i in range(0,self.P_A.size(1)):
+            
+#            pdb.set_trace()  
+            self.param_A = self.P_A[0,0,:].unsqueeze(0)#.view(self.B,i,20)
+            self.param_B = self.P_B[0,i,:].unsqueeze(0)#.view(self.B,i,20)
+            self.real_B=self.input_B[:,i*3:(i*3)+3,:,:]
+            self.real_A=self.input_A[:,0:3,:,:]
+            self.real_A.requires_grad=True
+#            pdb.set_trace()
+#        with torch.no_grad():
+            I_p=self.I_E(self.real_A)
+#        pdb.set_trace()
+            self.AUN=self.param_A.float()/100000
+            self.AUN[:,0:3] = 0.5 #
+#        self.AUN=self.real_B.float()+torch.randn(self.B,20).cuda()/10
+#        self.AUN=torch.clamp(self.AUN,0,1)
+#        I_pd=I_p.detach()
+#        pdb.set_trace()
+#        I_pd.requires_grad=True
+            self.fake_B = self.netGN(torch.cat([I_p,self.AUN],dim=1))
+            AUR=self.param_B.view(-1,20).float()
+#            AUR[:,2]=i/100
+#            AUR[:,3:20]=self.param_A.float()[:,3:20]
+#            AUR[:,0]=0.75
+
+#            AUR[:,1]=0.5
+#              
+#            AUR[:,2]=0.5
+            
+#            AUR[:,0]=torch.rand(1)[0]
+#            AUR[:,1]=torch.rand(1)[0]
+#            AUR[:,2]=torch.rand(1)[0]
+#            AUR[:,2]=(i+1)/10
+#            AUR[:,3]=0.2
+#            AUR[:,5]=0.8
+#            AUR[:,3:19]=torch.rand(16)/10
+#            AUR[:,3]=0.7
+#            AUR[:,16]=0
+#            AUR[:,18]=0.8
+#        with torch.no_grad():
+            I_f=self.I_E(self.fake_B)
+#        I_fd=I_f.detach()
+#        I_fd.requires_grad=True
+        
+#        pdb.set_trace()
+#        self.new_z2=z.view(z.size(0), z.size(1), 1, 1).expand(z.size(0), z.size(1), self.fake_B.size(2), self.fake_B.size(3))
+#        with torch.no_grad():
+            self.real_A_up=self.U(self.real_A)
+            self.fake_B_recon=self.netG(torch.cat([I_f.data,AUR],dim=1))
+#            self.fake_B_256=self.up1(torch.cat([self.real_A_up,self.U(self.fake_B_recon)],dim=1))
+      #      pdb.set_trace() 
+            torchvision.utils.save_image((self.fake_B_recon*0.5)+0.5,desti+'/'+str(i)+'_re'+'.png')
+            torchvision.utils.save_image((self.fake_B*0.5)+0.5,desti+'/'+str(i)+'_neut'+'.png')        
+            torchvision.utils.save_image((self.real_B*0.5)+0.5,desti+'/'+str(i)+'_gt'+'.png')
+#            torchvision.utils.save_image((self.fake_B_256*0.5)+0.5,desti+'/'+str(i)+'_256'+'.png')
+#            torchvision.utils.save_image((self.real_A_up*0.5)+0.5,desti+'/'+str(i)+'_A_up'+'.png')
+        torchvision.utils.save_image((self.real_A*0.5)+0.5,desti+'/'+str(i)+'_ref'+'.png')    
+   #     pdb.set_trace()
+        torch.__version__
+#        pdb.set_trace()
+#        os.system('export PATH="/home/esa/anaconda3/bin:$PATH"')
+#        os.system('source activate x2face')
+#        os.system('/home/esa/anaconda3/envs/x2face/bin/python /home/esa/Downloads/X2Face-master/UnwrapMosaic/Face2Face_UnwrapMosaic_run.py --driver_path %(language)s --source_path %(sp)s' %{'language': os.path.dirname(self.image_paths[0])+'/','sp': os.path.dirname(self.ref_paths[0])+'/'})
+#        os.system('source deactivate')
+#        pdb.set_trace()
+        
+    def forward(self):
+        self.real_A = self.input_A        
+        self.real_A.requires_grad=True
+        
+        self.real_B = self.input_B        
+        self.real_B.requires_grad=True
+        
+        self.param_A = self.P_A.view(self.B,20)
+        self.param_B = self.P_B.view(self.B,20)
+#        self.param_A.requires_grad=True
+        
+#        with torch.no_grad():
+        I_p=self.I_E(self.real_A)
+#        pdb.set_trace()
+        self.param_A=self.param_A.view(-1,20).float()
+        self.AUN = self.param_A.view(self.param_A.size(0), self.param_A.size(1), 1, 1).expand(
+               self.param_A.size(0), self.param_A.size(1), 128, 128)/100000000
+#        self.AUN=self.param_A.float()/100000
+        self.AUN[:,0:3] = 0.5 #
+#        self.AUN=self.real_B.float()+torch.randn(self.B,20).cuda()/10
+#        self.AUN=torch.clamp(self.AUN,0,1)
+#        I_pd=I_p.detach()
+#        pdb.set_trace()
+#        I_pd.requires_grad=True
+        self.fake_B = self.netGN(torch.cat([I_p,self.AUN],dim=1))
+        
+        self.param_B=self.param_B.view(-1,20).float()
+        AUR = self.param_B.view(self.param_B.size(0), self.param_B.size(1), 1, 1).expand(
+               self.param_B.size(0), self.param_B.size(1), 128, 128)
+#        with torch.no_grad():
+        I_f=self.I_E(self.fake_B)
+#        I_fd=I_f.detach()
+#        I_fd.requires_grad=True
+        
+#        pdb.set_trace()
+#        self.new_z2=z.view(z.size(0), z.size(1), 1, 1).expand(z.size(0), z.size(1), self.fake_B.size(2), self.fake_B.size(3))
+#        with torch.no_grad():
+        self.fake_B_recon=self.netG(torch.cat([I_f,AUR],dim=1))
+#        pdb.set_trace()
+        
+#        self.gar_con=self.u_sal(self.garbage)
+        
+#        pdb.set_trace()
+
+    # get image paths
+    def get_image_paths(self):
+        return self.image_paths
+    def _compute_loss_D(self, estim, is_real):
+        return -torch.mean(estim) if is_real else torch.mean(estim)
+
+        
+    def backward_DA(self):
+        
+        def compute_grad2(d_out, x_in):
+            batch_size = x_in.size(0)
+            grad_dout = autograd.grad(
+                    outputs=d_out.sum(), inputs=x_in,
+                    create_graph=True, retain_graph=True, only_inputs=True
+                    )[0]
+            grad_dout2 = grad_dout.pow(2)
+            assert(grad_dout2.size() == x_in.size())
+            reg = grad_dout2.view(batch_size, -1).sum(1)
+            return reg
+        # Fake
+        # stop backprop to the generator by detaching fake_B
+        
+        
+        pred_real, cond_real,class_pred = self.netDA(self.real_A)
+        
+#        self.D_loss1 = -(torch.mean(pred_real) - torch.mean(pred_fake))
+#        self.D_loss2 = -(torch.mean(pred_real) - torch.mean(pred_fake2))
+        
+        self.AUX_loss=self.criterionCE(class_pred,self.C.detach())*self.opt.lambda_C
+#        pdb.set_trace()
+        self.pred_loss_B=self.criterionL1(cond_real,self.param_A.float().detach())/self.B *self.opt.lambda_A
+        
+        self.loss_D_realB = self.criterionGAN(pred_real, True) +  self.AUX_loss + self.pred_loss_B
+        
+        self.loss_D_realB.backward(retain_graph=True)
+        
+        self.reg = 0.05*compute_grad2(pred_real, self.real_A).mean()
+        self.reg.backward()
+        
+        
+        fake_AB = self.fake_B_recon.detach()
+        fake_B=self.fake_B.detach()
+        fake_AB.requires_grad=True
+        fake_B.requires_gard=True
+        
+#        pdb.set_trace()
+        pred_fake, cond_fake, class_pred1 = self.netDA(fake_AB)
+        pred_fake2, cond_fake2,class_pred2 = self.netDA(fake_B)
+        
+#        pred_real, cond_real,class_pred = self.netDA(self.real_A)
+        
+        self.loss_D_fakeB  = self.criterionGAN(pred_fake, False)
+        
+        self.loss_D_fakeB2 = self.criterionGAN(pred_fake2, False)
+        
+       
+        
+        loss_fake=self.loss_D_fakeB + self.loss_D_fakeB2  
+        loss_fake.backward()#(retain_graph=True)
+#        pdb.set_trace()
+        # Real
+#        real_AB = self.real_A#self.real_A
+      
+#        real_pred=self.real_B.float() + (torch.rand(self.B,20)/torch.randint(10, 100, (1,))).cuda()
+#        pdb.set_trace()
+#        self.AUX_loss=self.criterionCE(class_pred,self.C.detach())*self.opt.lambda_C
+##        pdb.set_trace()
+#        self.pred_loss_B=self.criterionL1(cond_real,self.param_A.float().detach())/self.B *self.opt.lambda_A
+#        m = nn.LogSoftmax()
+        # Combined loss
+#        self.loss_DB = ((self.loss_D_fakeB + self.loss_D_realB)*0.5)  + self.pred_loss_B + self.loss_D_fakeB2 + self.AUX_loss
+        
+#        self.loss_DB = self.D_loss1 + self.D_loss2  + self.AUX_loss + self.pred_loss_B #+ self.loss_D_fakeB2 
+#        pdb.set_trace()
+#        self.loss_DB.backward()
+        
+        
+    def backward_GR(self):
+        
+#         fake_B=self.fake_B        
+#         self.fake_B_re=self.netGR(torch.cat([fake_B.detach(),self.new_z2.detach()],dim=1))
+         
+#         fake_BA = self.fake_B_re
+         
+#         pdb.set_trace()
+         pred_fake, E_con, class_pred = self.netDA(self.fake_B)
+         
+#         gar_con.register_hook(print)
+         self.loss_G_GANE = self.criterionGAN(pred_fake, True) #-torch.mean(pred_fake)#
+         
+         self.sal_loss2= self.criterionL1(E_con,self.param_A.detach()/1000000)/self.B*self.opt.lambda_A
+         
+         self.class_pred_loss =self.criterionCE(class_pred,self.C.detach())*self.opt.lambda_C
+         
+#         self.sal_loss_N1=self.criterionL1(gar_con,self.real_B.float().detach())/self.B*self.opt.lambda_A
+         
+#         self.recon_loss=self.criterionL1(self.fake_B_re,self.real_A.detach())*self.opt.lambda_B*0.1
+         
+         with torch.no_grad():
+             I_f=self.I_E(self.fake_B)
+             
+             self.tar=self.netG(torch.cat([I_f.data,self.AUN],dim=1))
+#         pdb.set_trace()
+         self.recon=self.criterionL1(self.fake_B,self.tar.detach())*self.opt.lambda_D
+         
+         self.recon_vgg=self.criterionVGG(self.fake_B,self.real_B.detach())*0.1
+
+        # AUR=self.param_B.view(-1,20).float()
+         AUR = self.param_B.view(self.param_B.size(0), self.param_B.size(1), 1, 1).expand(
+               self.param_B.size(0), self.param_B.size(1), 128, 128)
+
+         I_f=self.I_E(self.fake_B)
+#         pdb.set_trace()
+         self.fake_B_re=self.netG(torch.cat([I_f,AUR],dim=1))
+         self.R=self.criterionL1(self.fake_B_re,self.real_B.detach())*self.opt.lambda_B       
+         self.loss_GR= self.loss_G_GANE + self.sal_loss2 +self.recon + self.R + self.class_pred_loss + self.recon_vgg
+#         self.loss_GR= self.loss_G_GANE + self.sal_loss2
+#         pdb.set_trace()
+         self.loss_GR.backward()
+         
+    def backward_G(self):
+        
+        def compute_loss_smooth(mat):
+            return torch.sum(torch.abs(mat[:, :, :, :-1] - mat[:, :, :, 1:])) + \
+                   torch.sum(torch.abs(mat[:, :, :-1, :] - mat[:, :, 1:, :]))
+        # First, G(A) should fake the discriminator
+#        fake_B = self.netG(torch.cat([self.real_A,self.D_au],dim=1))
+#        fake_AB = fake_B
+#        pred_fake, E_con = self.netDA(self.fake_B)
+        
+        pred_fake_recon, gar_con, class_pred = self.netDA(self.fake_B_recon)
+#        pdb.set_trace()
+#        self.loss_G_GANE = self.criterionGAN(pred_fake_recon, True)
+#        pdb.set_trace()
+        self.loss_G_GAN = self.criterionGAN(pred_fake_recon, True) #-torch.mean(pred_fake_recon)#
+
+#        pdb.set_trace()
+#        self.sal_loss2= self.criterionL1(E_con,self.AUN.detach())/self.B*self.opt.lambda_A
+        self.sal_loss_N1=self.criterionL1(gar_con,self.param_B.float().detach())/self.B*self.opt.lambda_A
+        
+        self.recon_loss=self.criterionL1(self.fake_B_recon,self.real_B.detach())*self.opt.lambda_D
+        
+        self.class_pred_loss_recon=self.criterionCE(class_pred,self.C.detach())*self.opt.lambda_C
+#        self.loss_smooth=compute_loss_smooth(self.fake_B)*self.opt.lambda_B
+#        weight_regur=torch.mean(self.fake_B)
+        
+        self._loss_g_mask_1_smooth = self._compute_loss_smooth(self.fake_B_recon)*0.1 #* self.opt.lambda_A
+#        print(weight_regur)
+#torch.mean(torch.pow(self.fake_B, 2))*self.opt.lambda_B
+
+        self.loss_G =  self.loss_G_GAN + self.recon_loss + self.sal_loss_N1 + self.class_pred_loss_recon #+ self._loss_g_mask_1_smooth #+weight_regur#+ self.loss_G_L1 
+#        pdb.set_trace()
+        self.loss_G.backward(retain_graph=True)
+        
+    def _gradinet_penalty_D(self):
+        # interpolate sample
+        alpha = torch.rand(self.B, 1, 1, 1).cuda().expand_as(self.real_B)
+        interpolated = alpha * self.real_B.data + (1 - alpha) * self.fake_B_recon.data
+        interpolated.requires_grad=True
+#        p=self.fake_B.detach()
+#        p.requires_grad=True
+     #   pdb.set_trace()
+        interpolated_prob, cond_real,class_pred = self.netDA(interpolated)
+
+        # compute gradients
+        grad = torch.autograd.grad(outputs=interpolated_prob,
+                                   inputs=interpolated,
+                                   grad_outputs=torch.ones(interpolated_prob.size()).cuda(),
+                                   retain_graph=True,
+                                   create_graph=True,
+                                   only_inputs=True)[0]
+
+        # penalize gradients
+        grad = grad.view(grad.size(0), -1)
+        grad_l2norm = torch.sqrt(torch.sum(grad ** 2, dim=1))
+        self._loss_d_gp = torch.mean((grad_l2norm - 1) ** 2) * 1
+        self._loss_d_gp.backward()
+        
+    def optimize_parameters_D(self):
+        self.forward()
+
+        self.optimizer_DA.zero_grad()
+        self.backward_DA()
+        self.optimizer_DA.step()
+     #   for p in self.netDA.parameters():
+      #      p.data.clamp_(-0.01, 0.01)
+        
+       
+#        self.optimizer_DA.zero_grad()
+#        self._gradinet_penalty_D()
+##        loss_D_gp.backward()
+#        self.optimizer_DA.step()
+        
+        
+#        self.optimizer_D.zero_grad()
+#        self.backward_I()
+#        for param in self.netG.parameters():
+#            print(param.grad.data.sum())
+#        pdb.set_trace()
+       
+#        self.optimizer_D.step()
+        
+    def optimize_parameters_G(self):   
+        def toogle_grad(model, requires_grad):
+            for p in model.parameters():
+                p.requires_grad_(requires_grad)
+                
+        def update_average(model_tgt, model_src, beta):
+            toogle_grad(model_src, False)
+            toogle_grad(model_tgt, False)
+
+            param_dict_src = dict(model_src.named_parameters())
+
+            for p_name, p_tgt in model_tgt.named_parameters():
+                p_src = param_dict_src[p_name]
+                assert(p_src is not p_tgt)
+                p_tgt.copy_(beta*p_tgt + (1. - beta)*p_src)
+        
+#        self.generator_test = copy.deepcopy(self.netG)
+#        self.generator_testN = copy.deepcopy(self.netGN)
+        self.optimizer_G.zero_grad()
+        self.optimizer_I.zero_grad()
+        self.backward_G()
+        self.optimizer_G.step()
+#        for param in self.netG.parameters():
+#            print(param.grad.data.sum())
+#        pdb.set_trace()
+        
+#        update_average(self.generator_test, self.netG,
+#                               beta=0.99)
+        
+#        self.optimizer_I.zero_grad()
+        self.optimizer_I.step()
+#        self.optimizer_GN.step()
+        
+        self.optimizer_GN.zero_grad()
+        
+        self.backward_GR()
+#        for param in self.netG.parameters():
+#            print(param.grad.data.sum())
+#        pdb.set_trace()
+        self.optimizer_GN.step()
+#        update_average(self.generator_testN, self.netGN,
+#                               beta=0.99)
+        
+
+    def get_current_errors(self):
+        return OrderedDict([('G_GAN', self.loss_G_GAN.data[0]),
+                            ('G_GANE', self.loss_G_GANE.data[0]),
+                         #   ('sal_loss', self.sal_loss.data[0]),
+                            
+                            ('sal_loss2', self.sal_loss2.data[0]),
+                            ('sal_lossN1', self.sal_loss_N1.data[0]),
+                            ('recon_loss', self.recon_loss.data[0]),
+#                            ('d_gp', self._loss_d_gp.data[0]),
+#                            ('recon_loss2', self.recon_loss2.data[0]),
+                            ('grad_pen', self.reg.data[0]),
+                            ('D_loss_fake', self.loss_D_fakeB.data[0]),
+                            ('D_loss_real', self.loss_D_realB.data[0]),
+                            ('vgg', self.recon_vgg.data[0]),
+                            ('class_loss',self.class_pred_loss.data[0])
+#                            ('smooth', self._loss_g_mask_1_smooth.data[0]),
+#                            ('D_loss_fake_A',self.loss_D_fake.data[0])
+                            ])
+
+    def get_current_visuals(self):
+        
+       
+        torchvision.utils.save_image((self.fake_B_recon*0.5)+0.5,'recon_WGAN_dirac_steroid.png')
+        torchvision.utils.save_image((self.fake_B*0.5)+0.5,'neut_WGAN_dirac_steroid.png')        
+        torchvision.utils.save_image((self.real_A*0.5)+0.5,'real_WGAN_dirac_steroid.png')
+#        torchvision.utils.save_image((self.tar*0.5)+0.5,'tar.png')
+#        
+        real_A = util.tensor2im(self.input_A.data)
+        fake_B = util.tensor2im(self.fake_B.data)
+        fake_B_recon = util.tensor2im(self.fake_B_recon.data)
+ 
+        return OrderedDict([('real_A', real_A), ('fake_B', fake_B), ('fake_B_recon', fake_B_recon)])
+
+    def save(self, label):
+        self.save_network(self.netG, 'G', label, self.gpu_ids)
+        self.save_network(self.netDA, 'DA', label, self.gpu_ids)
+        self.save_network(self.I_E, 'I_E', label, self.gpu_ids)
+#        self.save_network(self.I_D, 'I_D', label, self.gpu_ids)
+#        self.save_network(self.netDB, 'DB', label, self.gpu_ids)
+        self.save_network(self.netGN, 'GN', label, self.gpu_ids)

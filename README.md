@@ -4,7 +4,7 @@
 
 This is the part of implementation for the  "ICface: Interpretable and Controllable Face Reenactment Using GANs" (https://arxiv.org/abs/1904.01909). 
 
-**_The test code is released now!_**
+:white_check_mark:**_The test code is released now!_**
 
 **Prerequisites**
 1. Python 3.5.4

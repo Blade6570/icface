@@ -1,10 +1,10 @@
 ## ICface: Interpretable and Controllable Face Reenactment Using GANs ##
 
-[**Project**](https://tutvision.github.io/icface/)   
+[**Project**](https://tutvision.github.io/icface/) [**Youtube**](https://www.youtube.com/watch?v=VhWrAjI6z0M)
 
 This is the part of implementation for the  "ICface: Interpretable and Controllable Face Reenactment Using GANs" (https://arxiv.org/abs/1904.01909). 
 
-*The test code is released now!*
+**_The test code is released now!_**
 
 **Prerequisites**
 1. Python 3.5.4
@@ -43,3 +43,4 @@ This is the part of implementation for the  "ICface: Interpretable and Controlla
 }
 
 ```
+

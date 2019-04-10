@@ -1,7 +1,7 @@
 ## ICface: Interpretable and Controllable Face Reenactment Using GANs ##
-
-[**Project**](https://tutvision.github.io/icface/) [**Youtube**](https://www.youtube.com/watch?v=VhWrAjI6z0M)
-
+***
+[**Project**](https://tutvision.github.io/icface/) | [**Youtube**](https://www.youtube.com/watch?v=VhWrAjI6z0M)
+***
 This is the part of implementation for the  "ICface: Interpretable and Controllable Face Reenactment Using GANs" (https://arxiv.org/abs/1904.01909). 
 
 :white_check_mark:**_The test code is released now!_**
@@ -30,7 +30,7 @@ This is the part of implementation for the  "ICface: Interpretable and Controlla
 1. In the python file *'image_crop.py'*, add your image path and run it.
 2. It will create a new cropped version of your image and will store in *'./new_crop'* folder. Then follow the above steps to create youe video file. 
 
-**_If you are using this implementation for your research work then please cite us as:_**
+-**_If you are using this implementation for your research work then please cite us as:_**
  
 ```
 #Citation 

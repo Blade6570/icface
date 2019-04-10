@@ -43,4 +43,5 @@ This is the part of the implementation of "ICface: Interpretable and Controllabl
 }
 
 ```
+*NOTE:* Code framework is based on [pix2pix](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix)
 

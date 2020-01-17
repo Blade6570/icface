@@ -5,6 +5,12 @@
 ***
 ![](https://github.com/Blade6570/icface/blob/master/images/tease.png?raw=true "teaser image")
 
+**Single Image Animation**
+
+Source Image-1 | Animation-1|Source Image-2 | Animation-2
+:---------:|:----------:|:---------:|:----------:
+ ![](https://github.com/Blade6570/icface/blob/master/test_code_released_new/new_crop/7.jpg?raw=true "teaser gif1") |![](https://github.com/Blade6570/icface/blob/master/images/kim.gif?raw=true "teaser gif1") | ![](https://github.com/Blade6570/icface/blob/master/test_code_released_new/new_crop/8.png?raw=true "teaser gif1") |![](https://github.com/Blade6570/icface/blob/master/images/trump.gif?raw=true "teaser gif1")               
+
 This is the part of the implementation of "ICface: Interpretable and Controllable Face Reenactment Using GANs" (https://arxiv.org/abs/1904.01909). 
 
 ~~_The test code is released now!_~~

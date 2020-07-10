@@ -20,17 +20,19 @@ model = create_model(opt)
 web_dir = os.path.join(opt.results_dir, opt.name, '%s_%s' % (opt.phase, opt.which_epoch))
 #webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.which_epoch))
 # test
-for i, data in enumerate(dataset):
-#    pdb.set_trace()
-    
-  
-    if i >= opt.how_many:
-        break
-    
-    model.set_input(data)
-    img_path = model.get_image_paths()
-    model.test()
+def main():
+    for i, data in enumerate(dataset):
+    #    pdb.set_trace()
+        if i >= opt.how_many:
+            break
 
-    img_path = model.get_image_paths()
-#    print('%04d: process image... %s' % (i, img_path))
-print("Done!")
+        model.set_input(data)
+        img_path = model.get_image_paths()
+        model.test()
+
+        img_path = model.get_image_paths()
+    #    print('%04d: process image... %s' % (i, img_path))
+    print("Done!")
+
+if __name__ == '__main__':
+    main()
